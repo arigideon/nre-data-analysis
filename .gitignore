@@ -3,8 +3,11 @@
 .gitattributes/
 __pycache__/
 *.pyc
-outputs/
-data/raw/
-data/processed/
 oldTemplate/
 *.ipynb_checkpoints
+*.csv
+*.png
+*.log
+*.txt
+*.npy
+*.keras
