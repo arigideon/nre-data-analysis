@@ -8,3 +8,4 @@ data/raw/
 data/processed/
 oldTemplate/
 *.ipynb_checkpoints
+.vscode
