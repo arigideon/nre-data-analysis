@@ -20,6 +20,24 @@ from tensorflow.keras.layers import Dense, Dropout, BatchNormalization
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 from tensorflow.keras.metrics import RootMeanSquaredError
 import tensorflow as tf
+import random # Adicionar import para a biblioteca random padrão
+
+# --- INÍCIO DA SEÇÃO DE FIXAÇÃO DE SEMENTES ---
+SEED_VALUE = 42 # Você pode escolher qualquer número inteiro
+
+# 1. Fixar semente para a biblioteca random do Python
+random.seed(SEED_VALUE)
+
+# 2. Fixar semente para NumPy
+np.random.seed(SEED_VALUE)
+
+# 3. Fixar semente para TensorFlow/Keras
+tf.random.set_seed(SEED_VALUE)
+
+# 4. Configurações adicionais para forçar operações do TensorFlow a serem determinísticas (opcional, mas recomendado para maior controle)
+# Pode ter um custo de performance. Remova ou comente se a performance for crítica e a reprodutibilidade já for suficiente com as sementes.
+# tf.config.experimental.enable_op_determinism() # Disponível em versões mais recentes do TF
+# --- FIM DA SEÇÃO DE FIXAÇÃO DE SEMENTES ---
 
 def setup_logging(logs_dir: Path):
     """Configura o logging."""
@@ -69,6 +87,8 @@ class LoadForecaster:
         self.models_dir = project_root / 'outputs/models'
         self.logs_dir = project_root / 'outputs/logs'
 
+        self.matrices_dir = project_root / 'outputs/matrices'
+
         # Create directories if they don't exist
         self.models_dir.mkdir(parents=True, exist_ok=True)
         self.logs_dir.mkdir(parents=True, exist_ok=True)
@@ -78,6 +98,13 @@ class LoadForecaster:
 
         # Define scenarios with combined demand approach
         self.scenarios = {
+            # 'RES': {  # Novo cenário apenas residencial
+            #     'input_cols': ['Dia', 'Mes', 'Hora', 'Dia_Semana',
+            #                  'Estacao', 'Periodo_Dia', 'Fim_Semana'],
+            #     'demand_cols': ['Demanda_Residencial'],
+            #     'target_col': 'Demanda_Residencial',
+            #     'model_name': 'model_residential'
+            # },
             'L1': {
                 'input_cols': ['Dia', 'Mes', 'Hora', 'Dia_Semana',
                              'Estacao', 'Periodo_Dia', 'Fim_Semana',
@@ -86,30 +113,30 @@ class LoadForecaster:
                 'target_col': 'Demanda_Total_L1',
                 'model_name': 'model_residential_L1'
             },
-            'L2': {
-                'input_cols': ['Dia', 'Mes', 'Hora', 'Dia_Semana',
-                             'Estacao', 'Periodo_Dia', 'Fim_Semana',
-                             'VEs_Plugados_L2'],
-                'demand_cols': ['Demanda_Residencial', 'Demanda_VE_L2'],
-                'target_col': 'Demanda_Total_L2',
-                'model_name': 'model_residential_L2'
-            },
-            'L1L2': {
-                'input_cols': ['Dia', 'Mes', 'Hora', 'Dia_Semana',
-                             'Estacao', 'Periodo_Dia', 'Fim_Semana',
-                             'VEs_Plugados_L1', 'VEs_Plugados_L2'],
-                'demand_cols': ['Demanda_Residencial', 'Demanda_VE_L1', 'Demanda_VE_L2'],
-                'target_col': 'Demanda_Total',
-                'model_name': 'model_residential_L1L2'
-            }
+            # 'L2': {
+            #     'input_cols': ['Dia', 'Mes', 'Hora', 'Dia_Semana',
+            #                  'Estacao', 'Periodo_Dia', 'Fim_Semana',
+            #                  'VEs_Plugados_L2'],
+            #     'demand_cols': ['Demanda_Residencial', 'Demanda_VE_L2'],
+            #     'target_col': 'Demanda_Total_L2',
+            #     'model_name': 'model_residential_L2'
+            # },
+            # 'L1L2': {
+            #     'input_cols': ['Dia', 'Mes', 'Hora', 'Dia_Semana',
+            #                  'Estacao', 'Periodo_Dia', 'Fim_Semana',
+            #                  'VEs_Plugados_L1', 'VEs_Plugados_L2'],
+            #     'demand_cols': ['Demanda_Residencial', 'Demanda_VE_L1', 'Demanda_VE_L2'],
+            #     'target_col': 'Demanda_Total',
+            #     'model_name': 'model_residential_L1L2'
+            # }
         }
 
     def prepare_data(self, scenario: str):
         """
-        Prepara os dados para treinamento, combinando as demandas.
+        Prepara os dados para treinamento.
 
         Args:
-            scenario: O cenário para preparar os dados ('L1', 'L2', ou 'L1L2')
+            scenario: O cenário para preparar os dados ('RES', 'L1', 'L2', ou 'L1L2')
 
         Returns:
             tuple: (X_train, X_test, y_train, y_test)
@@ -118,12 +145,17 @@ class LoadForecaster:
             # Load data
             df = pd.read_csv(self.data_dir / 'Total-Demand-Features.csv')
 
-            # Calculate combined demand
-            df['Demanda_Combinada'] = df[self.scenarios[scenario]['demand_cols']].sum(axis=1)
+            # Prepare features based on scenario
+            if scenario == 'RES':
+                # Para o cenário residencial, usamos a demanda residencial diretamente
+                features = self.scenarios[scenario]['input_cols'] + ['Demanda_Residencial']
+                X = df[features].values
+            else:
+                # Para os outros cenários, calculamos a demanda combinada
+                df['Demanda_Combinada'] = df[self.scenarios[scenario]['demand_cols']].sum(axis=1)
+                features = self.scenarios[scenario]['input_cols'] + ['Demanda_Combinada']
+                X = df[features].values
 
-            # Combine features with combined demand
-            features = self.scenarios[scenario]['input_cols'] + ['Demanda_Combinada']
-            X = df[features].values
             y = df[self.scenarios[scenario]['target_col']].values
 
             # Create target for next hour prediction
@@ -166,17 +198,17 @@ class LoadForecaster:
         """
         model = Sequential([
             # Primeira camada
-            Dense(64, activation='relu', input_dim=input_dim),
+            Dense(9, activation='relu', input_dim=input_dim),
             BatchNormalization(),
-            Dropout(0.2),
+            #Dropout(0.1),
 
             # Segunda camada
-            Dense(32, activation='relu'),
+            Dense(6, activation='relu'),
             BatchNormalization(),
-            Dropout(0.2),
+            #Dropout(0.1),
 
             # Terceira camada
-            Dense(16, activation='relu'),
+            Dense(2, activation='relu'),
             BatchNormalization(),
 
             # Camada de saída
@@ -184,7 +216,7 @@ class LoadForecaster:
         ])
 
         model.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
+            optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001),
             loss='mse',
             metrics=[
                 'mae',
@@ -206,7 +238,42 @@ class LoadForecaster:
             logging.info(f"\nTraining scenario: {scenario}")
 
             # Prepare data
-            X_train, X_test, y_train, y_test = self.prepare_data(scenario)
+            #X_train, X_test, y_train, y_test = self.prepare_data(scenario)
+
+            # --- Início da Modificação ---
+
+            # 1. Preparar dados (como no código original)
+            X_train_full, X_test, y_train_full, y_test = self.prepare_data(scenario)
+
+            # 2. Dividir o conjunto de treino para criar um conjunto de validação explícito
+            X_train, X_val, y_train, y_val = train_test_split(
+                X_train_full, y_train_full, test_size=0.2, random_state=42
+            )
+
+            # 3. Salvar todas as matrizes
+            logging.info("Saving training, validation, and test matrices...")
+            
+            # Matrizes de entrada (features)
+            np.save(self.matrices_dir / f"{scenario}_X_train.npy", X_train)
+            np.save(self.matrices_dir / f"{scenario}_X_val.npy", X_val)
+            np.save(self.matrices_dir / f"{scenario}_X_test.npy", X_test)
+            
+            # Matrizes de saída (target)
+            np.save(self.matrices_dir / f"{scenario}_y_train.npy", y_train)
+            np.save(self.matrices_dir / f"{scenario}_y_val.npy", y_val)
+            np.save(self.matrices_dir / f"{scenario}_y_test.npy", y_test)
+
+            # --- SALVANDO EM .CSV (FORMATO ACESSÍVEL PARA RELATÓRIOS) ---
+            logging.info("Saving matrices in CSV format...")
+            np.savetxt(self.matrices_dir / f"{scenario}_X_train.csv", X_train, delimiter=",")         # <--- SALVAR EM CSV
+            np.savetxt(self.matrices_dir / f"{scenario}_X_val.csv", X_val, delimiter=",")             # <--- SALVAR EM CSV
+            np.savetxt(self.matrices_dir / f"{scenario}_X_test.csv", X_test, delimiter=",")           # <--- SALVAR EM CSV
+            np.savetxt(self.matrices_dir / f"{scenario}_y_train.csv", y_train, delimiter=",")         # <--- SALVAR EM CSV
+            np.savetxt(self.matrices_dir / f"{scenario}_y_val.csv", y_val, delimiter=",")             # <--- SALVAR EM CSV
+            np.savetxt(self.matrices_dir / f"{scenario}_y_test.csv", y_test, delimiter=",")           # <--- SALVAR EM CSV
+            
+            
+            logging.info(f"Matrices saved in: {self.matrices_dir}")
 
             # Create model
             model = self.create_model(X_train.shape[1])
@@ -230,7 +297,8 @@ class LoadForecaster:
                 X_train, y_train,
                 epochs=100,
                 batch_size=32,
-                validation_split=0.2,
+                #validation_split=0.2,
+                validation_data=(X_val, y_val),
                 callbacks=callbacks,
                 verbose=1
             )
