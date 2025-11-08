@@ -8,3 +8,9 @@ data/raw/
 data/processed/
 oldTemplate/
 *.ipynb_checkpoints
+requirements2.txt
+*.csv
+*.log
+*.tmp
+*.npy
+*.keras

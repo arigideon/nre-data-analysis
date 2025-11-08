@@ -195,137 +195,69 @@ class ModelVisualizer:
             raise
 
     def plot_demand_comparison(self, scenario: str):
-        
-        """Plot comparison between residential, combined and total demand, and model prediction."""
+        """Plot comparison between residential, combined and total demand."""
         try:
-            import numpy as np
-            from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-
             df = pd.read_csv(self.data_dir / 'Total-Demand-Features.csv')
 
-            # Adicionar previsão do modelo
-            model, _ = self.load_model_and_history(scenario)
-
-            # Calcular demanda combinada
-            df['Demanda_Combinada'] = df[self.scenarios[scenario]['demand_cols']].sum(axis=1)
-
-            # Preparar features para o modelo
-            features = self.get_features_for_scenario(scenario)
-            X = df[features].values
-            y = df[self.scenarios[scenario]['target_col']].values
-
-            # Escalar dados
-            x_scaler = MinMaxScaler()
-            y_scaler = MinMaxScaler()
-            X_scaled = x_scaler.fit_transform(X)
-            y_scaled = y_scaler.fit_transform(y.reshape(-1, 1))
-
-            # Fazer previsão
-            y_pred_scaled = model.predict(X_scaled)
-            y_pred = y_scaler.inverse_transform(y_pred_scaled).flatten()
-
-            # Adicionar previsão ao dataframe
-            df['Demanda_Prevista'] = y_pred
-
-            # Selecionar dados de uma semana para visualização
-            week_data = df.iloc[:168]
-            x = range(len(week_data))
-
-            # Cores para cada curva
-            colors = {
-                'Residencial': 'royalblue',
-                'Combinada': 'forestgreen',
-                'Total': 'firebrick',
-                'Prevista': 'darkorange'
-            }
-
-            # PLOT 1: Comparação de demandas (original)
-            plt.figure(figsize=(15, 8))
             if scenario == 'RES':
-                y1 = week_data['Demanda_Residencial']
-                plt.fill_between(x, y1, color=colors['Residencial'], alpha=0.4)
-                plt.plot(x, y1, label='Demanda Residencial', color=colors['Residencial'], linewidth=2)
+                # Para o cenário residencial, plotamos apenas a demanda residencial
+                week_data = df.iloc[:168]
+                plt.figure(figsize=(15, 8))
+                plt.plot(range(len(week_data)), week_data['Demanda_Residencial'],
+                        label='Demanda Residencial', alpha=0.7)
             else:
+                df['Demanda_Combinada'] = df[self.scenarios[scenario]['demand_cols']].sum(axis=1)
+                week_data = df.iloc[:168]
+
+                plt.figure(figsize=(15, 8))
+
+                # Cores para cada curva
+                colors = {
+                    'Residencial': 'royalblue',
+                    'Combinada': 'forestgreen',
+                    'Total': 'red'
+                }
+
+                # Plotando com áreas coloridas
+                x = range(len(week_data))
+
+                # Demanda Residencial
                 y1 = week_data['Demanda_Residencial']
                 plt.fill_between(x, y1, color=colors['Residencial'], alpha=0.4)
                 plt.plot(x, y1, label='Apenas Residencial', color=colors['Residencial'], linewidth=2)
+
+                # Demanda Combinada
+                #y2 = week_data['Demanda_Combinada']
+                #plt.fill_between(x, y2, color=colors['Combinada'], alpha=0.4)
+                #plt.plot(x, y2, label=f'Demanda Combinada ({scenario})', color=colors['Combinada'], linewidth=2)
+
+                # Demanda Total
                 y3 = week_data[self.scenarios[scenario]['target_col']]
                 plt.fill_between(x, y3, color=colors['Total'], alpha=0.4)
                 plt.plot(x, y3, label=f'Demanda Total ({scenario})', color=colors['Total'], linewidth=2)
-            plt.title(f'Comparação de Demandas - {self.scenarios[scenario]["name"]}', fontsize=14, fontweight='bold')
+
+                #plt.plot(range(len(week_data)), week_data['Demanda_Residencial'],
+                #        label='Apenas Residencial', alpha=0.7)
+                #plt.plot(range(len(week_data)), week_data['Demanda_Combinada'],
+                #        label=f'Demanda Combinada ({scenario})', alpha=0.7)
+                #plt.plot(range(len(week_data)), week_data[self.scenarios[scenario]['target_col']],
+                #        label=f'Demanda Total ({scenario})', alpha=0.7)
+
+            plt.title(f'Comparação de Demandas - {self.scenarios[scenario]["name"]}',fontsize=14, fontweight='bold')
             plt.xlabel('Horas', fontsize=12)
             plt.ylabel('Demanda (W)', fontsize=12)
             plt.legend(fontsize=10)
             plt.grid(True, alpha=0.3)
             plt.tight_layout()
-            plt.savefig(self.figures_dir / f'demand_comparison_{scenario}.png', dpi=300)
+            plt.savefig(self.figures_dir / f'demand_comparison_{scenario}.png')
             plt.close()
-
-            # PLOT 2: Real vs Previsto (apenas linhas)
-            plt.figure(figsize=(15, 8))
-            y_real = week_data[self.scenarios[scenario]['target_col']]
-            y_pred_week = week_data['Demanda_Prevista']
-            plt.plot(x, y_real, label='Demanda Real', color=colors['Total'], linewidth=2)
-            plt.plot(x, y_pred_week, label='Demanda Prevista', color=colors['Prevista'], linewidth=2, linestyle='--')
-
-            # Métricas para a semana plotada
-            mae_week = mean_absolute_error(y_real, y_pred_week)
-            rmse_week = np.sqrt(mean_squared_error(y_real, y_pred_week))
-            r2_week = r2_score(y_real, y_pred_week)
-            mape_week = np.mean(np.abs((y_real - y_pred_week) / y_real)) * 100
-
-            metrics_text = f'MAE: {mae_week:.2f} W, RMSE: {rmse_week:.2f} W, R²: {r2_week:.4f}, MAPE: {mape_week:.2f}%'
-            plt.title(f'Demanda Real vs Prevista - {self.scenarios[scenario]["name"]}\n{metrics_text}',
-                    fontsize=14, fontweight='bold')
-            plt.xlabel('Horas', fontsize=12)
-            plt.ylabel('Demanda (W)', fontsize=12)
-            plt.legend(fontsize=10)
-            plt.grid(True, alpha=0.3)
-            plt.tight_layout()
-            plt.savefig(self.figures_dir / f'real_vs_predicted_{scenario}.png', dpi=300)
-            plt.close()
-
-            # PLOT 3: Erro de previsão
-            plt.figure(figsize=(15, 6))
-            error = y_pred_week - y_real
-            plt.bar(x, error, color='darkred', alpha=0.7)
-            plt.axhline(y=0, color='black', linestyle='-', linewidth=1)
-            plt.title(f'Erro de Previsão (Previsto - Real) - {self.scenarios[scenario]["name"]}',
-                    fontsize=14, fontweight='bold')
-            plt.xlabel('Horas', fontsize=12)
-            plt.ylabel('Erro (W)', fontsize=12)
-            plt.grid(True, alpha=0.3)
-            plt.tight_layout()
-            plt.savefig(self.figures_dir / f'prediction_error_{scenario}.png', dpi=300)
-            plt.close()
-
-            # Métricas totais do modelo (toda a base)
-            mae_total = mean_absolute_error(y, y_pred)
-            rmse_total = np.sqrt(mean_squared_error(y, y_pred))
-            r2_total = r2_score(y, y_pred)
-            mape_total = np.mean(np.abs((y - y_pred) / y)) * 100
-
-            # Salvar métricas em um arquivo txt
-            metrics_path = self.figures_dir / f'weekly_metrics_{scenario}.txt'
-            with open(metrics_path, 'w', encoding='utf-8') as f:
-                f.write(f'Métricas de desempenho para a semana plotada - {self.scenarios[scenario]["name"]}\n')
-                f.write(f'MAE: {mae_week:.2f} W\n')
-                f.write(f'RMSE: {rmse_week:.2f} W\n')
-                f.write(f'R²: {r2_week:.4f}\n')
-                f.write(f'MAPE: {mape_week:.2f}%\n')
-                f.write('\n')
-                f.write(f'Métricas de desempenho para todo o conjunto de dados - {self.scenarios[scenario]["name"]}\n')
-                f.write(f'MAE: {mae_total:.2f} W\n')
-                f.write(f'RMSE: {rmse_total:.2f} W\n')
-                f.write(f'R²: {r2_total:.4f}\n')
-                f.write(f'MAPE: {mape_total:.2f}%\n')
 
         except Exception as e:
             logging.error(f"Error plotting demand comparison: {str(e)}")
             raise
 
     def plot_sensitivity_analysis(self, scenario: str):
-        """Plot sensitivity analysis for model features, with and without demand feature(s)."""
+        """Plot sensitivity analysis for model features."""
         try:
             model, _ = self.load_model_and_history(scenario)
             df = pd.read_csv(self.data_dir / 'Total-Demand-Features.csv')
@@ -352,7 +284,7 @@ class ModelVisualizer:
                 sensitivity = np.mean(np.abs(new_prediction - base_prediction))
                 sensitivities.append(sensitivity)
 
-            # Plot 1: Todas as features
+            # Plot
             plt.figure(figsize=(12, 6))
             plt.bar(features, sensitivities)
             plt.title(f'Análise de Sensibilidade das Features - {self.scenarios[scenario]["name"]}')
@@ -361,26 +293,6 @@ class ModelVisualizer:
             plt.grid(True)
             plt.tight_layout()
             plt.savefig(self.figures_dir / f'sensitivity_{scenario}.png')
-            plt.close()
-
-            # Plot 2: Sem features de demanda
-            # Identifique features de demanda (pode ser mais de uma)
-            demand_feats = [f for f in features if 'demanda' in f.lower()]
-            # Se você quiser incluir 'Demanda_Combinada', adicione:
-            if 'Demanda_Combinada' in features:
-                demand_feats.append('Demanda_Combinada')
-
-            features_no_demand = [f for f in features if f not in demand_feats]
-            sensitivities_no_demand = [s for f, s in zip(features, sensitivities) if f not in demand_feats]
-
-            plt.figure(figsize=(12, 6))
-            plt.bar(features_no_demand, sensitivities_no_demand, color='tab:orange')
-            plt.title(f'Análise de Sensibilidade (sem demanda) - {self.scenarios[scenario]["name"]}')
-            plt.xticks(rotation=45)
-            plt.ylabel('Sensibilidade')
-            plt.grid(True)
-            plt.tight_layout()
-            plt.savefig(self.figures_dir / f'sensitivity_{scenario}_sem_demanda.png')
             plt.close()
 
         except Exception as e:
@@ -769,48 +681,6 @@ class ModelVisualizer:
             logging.error(f"Error in sensitivity analysis: {str(e)}")
             raise
 
-    def save_sensitivity_table(self, scenario: str):
-        """Save a CSV table with feature sensitivities (normalized and in watts)."""
-        model, _ = self.load_model_and_history(scenario)
-        df = pd.read_csv(self.data_dir / 'Total-Demand-Features.csv')
-        df['Demanda_Combinada'] = df[self.scenarios[scenario]['demand_cols']].sum(axis=1)
-        features = self.get_features_for_scenario(scenario)
-        X = df[features].values
-
-        # Scalers
-        x_scaler = MinMaxScaler()
-        X_scaled = x_scaler.fit_transform(X)
-        y = df[self.scenarios[scenario]['target_col']].values
-        y_scaler = MinMaxScaler()
-        y_scaler.fit(y.reshape(-1, 1))
-
-        base_prediction = model.predict(X_scaled)
-        sensitivities_norm = []
-        sensitivities_watt = []
-
-        for i, feature in enumerate(features):
-            X_perturbed = X_scaled.copy()
-            X_perturbed[:, i] *= 1.1  # 10% increase
-            new_prediction = model.predict(X_perturbed)
-            # Sensibilidade normalizada
-            sens_norm = np.mean(np.abs(new_prediction - base_prediction))
-            sensitivities_norm.append(sens_norm)
-            # Sensibilidade desnormalizada (em watts)
-            base_pred_watt = y_scaler.inverse_transform(base_prediction)
-            new_pred_watt = y_scaler.inverse_transform(new_prediction)
-            sens_watt = np.mean(np.abs(new_pred_watt - base_pred_watt))
-            sensitivities_watt.append(sens_watt)
-
-        # Salva CSV
-        sens_df = pd.DataFrame({
-            'Feature': features,
-            'Sensitivity_Normalized': sensitivities_norm,
-            'Sensitivity_Watt': sensitivities_watt
-        })
-        sens_df = sens_df.sort_values('Sensitivity_Watt', ascending=False)
-        sens_df.to_csv(self.figures_dir / f'sensitivity_table_{scenario}.csv', index=False)
-        print(f"Sensitivity table saved to {self.figures_dir / f'sensitivity_table_{scenario}.csv'}")
-
 def main():
     """Main function to execute the visualization pipeline."""
     try:
@@ -844,10 +714,9 @@ def main():
                 print("7. Individual Prediction")  # NOVA OPÇÃO
                 print("8. View Model Architecture")  # NOVA OPÇÃO
                 print("9. Sensitivity Analysis (one feature)")  # NOVA OPÇÃO
-                print("10. Sensitivity Table (Summary)")
-                print("11. Back to Main Menu")
+                print("10. Back to Main Menu")
 
-                viz_choice = input("\nEnter your choice (1-11): ")
+                viz_choice = input("\nEnter your choice (1-10): ")
 
                 if viz_choice == '1':
                     _, history = visualizer.load_model_and_history(scenario)
@@ -868,10 +737,8 @@ def main():
                     visualizer.show_model_architecture(scenario)  # Função a ser implementada
                 elif viz_choice == '9':
                     visualizer.sensitivity_analysis_one_feature(scenario)  # Função a ser implementada
-                elif viz_choice == '10':
-                    visualizer.save_sensitivity_table(scenario)
 
-                if viz_choice not in ['11']:
+                if viz_choice not in ['10']:
                     logging.info(f"Plot(s) saved in {visualizer.figures_dir}")
 
     except Exception as e:
