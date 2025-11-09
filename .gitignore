@@ -6,7 +6,7 @@ __pycache__/
 oldTemplate/
 *.ipynb_checkpoints
 *.csv
-*.png
+/outputs/figures/*.png
 *.log
 *.txt
 *.npy
